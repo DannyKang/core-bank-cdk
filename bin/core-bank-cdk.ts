@@ -40,7 +40,7 @@ export class CoreBankInfraStack extends cdk.Stack {
 
         // MSK Cluster
         this.kafkaCluster = new msk.CfnCluster(this, 'KafkaCluster', {
-            clusterName: 'composable-bank-kafka-cluster-3',
+            clusterName: 'composable-bank-kafka-cluster',
             kafkaVersion: '3.6.0',
             numberOfBrokerNodes: 6,
             brokerNodeGroupInfo: {
@@ -48,35 +48,9 @@ export class CoreBankInfraStack extends cdk.Stack {
                 clientSubnets: this.vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }).subnetIds,
                 storageInfo: { ebsStorageInfo: { volumeSize: 1000 } },
             },
-            //encryptionInfo: { encryptionAtRest: { dataVolumeKmsKeyId: 'AWS_OWNED_KMS_KEY' } },
-            //encryptionInfo: { encryptionAtRest: { dataVolumeKmsKeyId: 'alias/aws/kafka' } },
+
         });
 
-        // EKS Cluster
-        //const kubectlLayer = lambda.LayerVersion.fromLayerVersionArn(this, 'KubectlLayer', 'arn:aws:serverlessrepo:us-east-1:903779448426:applications/lambda-layer-kubectl');
-        //     // Serverless Application Repository에서 Lambda Layer (kubectl) 추가
-        // const kubectlLayerApp = new serverlessrepo.CfnApplication(this, 'KubectlLayerApp', {
-        //     applicationId: 'arn:aws:serverlessrepo:us-east-1:903779448426:applications/lambda-layer-kubectl',
-        // });
-
-        // const kubectlLayer = lambda.LayerVersion.fromLayerVersionArn(this, 'KubectlLayer', `arn:aws:lambda:us-east-1:903779448426:layer:KubectlLayer:${kubectlLayerApp.attrLatestVersionVersion}`);
-    
-
-        // this.eksCluster = new eks.Cluster(this, 'EKSCluster', {
-        //     version: eks.KubernetesVersion.V1_32,
-        //     vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
-        //     defaultCapacity: 2,
-        //     kubectlLayer: kubectlLayer,
-        // });
-        // EKS 클러스터 생성
-
-        // this.eksCluster = new eks.Cluster(this, 'EKSCluster', {
-        //   version: eks.KubernetesVersion.V1_32,
-        //   vpc: this.vpc,
-        //   vpcSubnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
-        //   defaultCapacity: 2,
-        //   //kubectlLayer: new kubectl.KubectlLayer(this, 'KubectlLayer'),
-        // });
 
         // EKS 클러스터 생성
         const clusterLogging = [
@@ -94,6 +68,11 @@ export class CoreBankInfraStack extends cdk.Stack {
             kubectlLayer: new KubectlLayer(this, "kubectl"),
             ipFamily: eks.IpFamily.IP_V4,
             clusterLogging: clusterLogging,
+            vpcSubnets: [
+                {
+                    subnetGroupName: 'core-bank-eks-msk-private',
+                }
+            ]
         });
     
         this.eksCluster.addNodegroupCapacity("custom-node-group", {
@@ -123,35 +102,23 @@ export class CoreBankInfraStack extends cdk.Stack {
         // Allow EKS Pods to access RDS
         rdsSecurityGroup.addIngressRule(this.eksCluster.clusterSecurityGroup, ec2.Port.tcp(5432), 'Allow EKS to access RDS');
 
-        // Shared Secret for RDS
-        // this.secret = new secretsmanager.Secret(this, 'AuroraDBSharedSecret', {
-        //     generateSecretString: {
-        //         secretStringTemplate: JSON.stringify({ username: 'postgres' }),
-        //         generateStringKey: 'password',
-        //         excludePunctuation: false,
-        //         passwordLength: 16,
-        //     },
-        // });
 
         // Aurora RDS Instances (5 DBs)
         const dbNames = ['modernbank-account', 'modernbank-user', 'modernbank-transfer', 'modernbank-customer', 'modernbank-cqrs'];
         
         dbNames.forEach((dbName, index) => {
-            const dbSecret = new secretsmanager.Secret(this, `AuroraDBSecret-${dbName}`, {
-                secretStringValue: cdk.SecretValue.unsafePlainText(JSON.stringify({
-                    username: 'postgres',
-                    password: 'postgres1234!',
-                })),
-            });
-
+  
             const dbCluster = new rds.DatabaseCluster(this, `${dbName}`, { // 고유한 ID 사용
                 engine: rds.DatabaseClusterEngine.auroraPostgres({ version: rds.AuroraPostgresEngineVersion.VER_14_13 }),
         
-                // ✅ 각 클러스터에 대해 개별적으로 생성된 Secret을 사용
-                credentials: rds.Credentials.fromSecret(dbSecret, 'postgres'),
+                // 클러스터에 username, password 사용
+                //credentials: rds.Credentials.fromSecret(this.secret),
+                credentials: rds.Credentials.fromUsername('postgres', {
+                    password: cdk.SecretValue.unsafePlainText('postgres1234!'),
+                }),
         
-                vpc: this.vpc, // ✅ VPC 지정
-                vpcSubnets: { // ✅ 특정 서브넷 설정
+                vpc: this.vpc, 
+                vpcSubnets: { 
                     subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
                 },
         
