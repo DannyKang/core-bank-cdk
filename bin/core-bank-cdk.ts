@@ -168,6 +168,8 @@ export class CoreBankInfraStack extends cdk.Stack {
 
         // SSH (22번 포트) 허용
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH access from anywhere');
+        // SSH (8080번 포트) 허용 - VS Code
+        securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow 8080 access from anywhere');
 
         // RDS 접근 허용
         this.rdsClusters.forEach(cluster => {
@@ -178,7 +180,7 @@ export class CoreBankInfraStack extends cdk.Stack {
             vpc: this.vpc,
             instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.XLARGE),
             machineImage: ec2.MachineImage.genericLinux({
-                'ap-northeast-2': 'ami-07c3eff95841e4cc4' // 공개된 AMI ID 입력
+                'ap-northeast-2': 'ami-08d803b9d3be267c0' // 공개된 AMI ID 입력
             }),
             securityGroup: securityGroup,
             vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }

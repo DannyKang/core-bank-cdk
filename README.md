@@ -40,7 +40,7 @@ cdk init app --language typescript
 
 ### git clone
 ```
-git clone
+git clone https://github.com/DannyKang/core-bank-cdk.git
 cd core-bank-cdk
 npm install
 
